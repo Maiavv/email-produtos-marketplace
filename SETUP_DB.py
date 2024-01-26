@@ -39,4 +39,4 @@ def criar_tabelas(nome_arquivo_db):
     conexao.commit()
     conexao.close()
 
-criar_tabelas("dados_concorrentes.db")
+criar_tabelas("teste.db")
