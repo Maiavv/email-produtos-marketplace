@@ -1,7 +1,8 @@
 import pyodbc
 import pandas as pd
 import numpy as np
-
+import os
+import re
 
 from sqlalchemy import create_engine, select, Table, MetaData, func, text
 import sqlite3
@@ -9,11 +10,13 @@ import sqlite3
 
 def obter_produtos_balaroti():
     query = """--sql
-    SELECT CADPROD.pr_codbarra, CADPROD.PR_DESCRICAO, LP_PRECOBASE, LP_PRECOVENDA, ESTOQUE_ATUAL.EA_SALATU, ESTOQUE_ATUAL.EA_IDLOJA
+    SELECT CADPROD.pr_codbarra, CADPROD.PR_DESCRICAO, CADPROD.PR_MARCA, listapre.LP_PRECOBASE, listapre.LP_PRECOVENDA, ESTOQUE_ATUAL.EA_SALATU, ESTOQUE_ATUAL.EA_IDLOJA, grupo.GR_DESCRICAO
     FROM listapre
     INNER JOIN CADPROD ON listapre.lp_idproduto = CADPROD.pr_idproduto
     INNER JOIN ESTOQUE_ATUAL ON CADPROD.PR_CODSEQ = ESTOQUE_ATUAL.EA_IDCODSEQ
-    WHERE CADPROD.PR_FORADELINHA = 'N' and listapre.LP_IDLISTA = 1 
+    INNER JOIN grupo ON CADPROD.PR_IDGRUPO = grupo.GR_IDGRUPO
+    WHERE CADPROD.PR_FORADELINHA = 'N' AND listapre.LP_IDLISTA = 1;
+    -- COMO QUE FAZ PARA FILTRAR APENAS OS CADPROD.PR_CORBARRA LENGHT > 12
     """
 
     with pyodbc.connect("DSN=BDMTRIZ") as conn:
@@ -24,9 +27,17 @@ def obter_produtos_balaroti():
         )
     df = df.convert_dtypes()
     print(df.columns)
-    # Agrupamento e soma do estoque atual, mantendo as outras colunas relevantes
     df_agregado = (
-        df.groupby(["PR_CODBARRA", "PR_DESCRICAO", "LP_PRECOBASE", "LP_PRECOVENDA"])
+        df.groupby(
+            [
+                "PR_CODBARRA",
+                "PR_DESCRICAO",
+                "PR_MARCA",
+                "LP_PRECOBASE",
+                "LP_PRECOVENDA",
+                "GR_DESCRICAO",
+            ]
+        )
         .agg({"EA_SALATU": "sum"})
         .reset_index()
     )
@@ -35,6 +46,8 @@ def obter_produtos_balaroti():
         columns={
             "PR_CODBARRA": "ean",
             "PR_DESCRICAO": "descricao",
+            "GR_DESCRICAO": "grupo",
+            "PR_MARCA": "marca",
             "LP_PRECOBASE": "preco_base",
             "LP_PRECOVENDA": "preco_venda",
             "EA_SALATU": "estoque_atual",
@@ -46,6 +59,8 @@ def obter_produtos_balaroti():
         {
             "ean": str,
             "descricao": str,
+            "marca": str,
+            "grupo": str,
             "preco_base": float,
             "preco_venda": float,
             "estoque_atual": int,
@@ -59,7 +74,7 @@ def obter_produtos_balaroti():
 
 def obter_produtos_concorrentes():
     query = """--sql
-    SELECT ean, preco, nome, list_price, id_loja, available_quantity, PrecosDiarios.data
+    SELECT ean, preco, marca, nome, list_price, id_loja, available_quantity, PrecosDiarios.data
     FROM Produtos
     JOIN PrecosDiarios ON Produtos.id_produto = PrecosDiarios.id_produto
     WHERE available_quantity > 0 
@@ -75,18 +90,17 @@ def obter_produtos_concorrentes():
         {
             "ean": str,
             "preco": float,
+            "marca": str,
             "list_price": float,
             "id_loja": int,
             "available_quantity": int,
         }
     )
 
-    # pegando somente a data mais recente
     df_concorrentes = df_concorrentes.loc[
         df_concorrentes.groupby(["ean", "id_loja"]).data.idxmax()
     ]
 
-    # tirando a coluna data
     df_concorrentes = df_concorrentes.drop(columns=["data"])
 
     return df_concorrentes
@@ -103,8 +117,10 @@ def combinar_dados(df_balaroti, df_concorrentes):
         pd.MultiIndex.from_tuples(
             [
                 ("Balaroti", "descricao"),
+                ("Balaroti", "marca"),
                 ("Balaroti", "preco_base"),
                 ("Balaroti", "preco_venda"),
+                ("Balaroti", "grupo"),
                 ("Balaroti", "estoque"),
             ]
         ),
@@ -119,10 +135,25 @@ def combinar_dados(df_balaroti, df_concorrentes):
         .pipe(lambda s: s.where(s.notna(), unidos[3, "nome"]))
     )
 
-    colunas_para_remover = [
+    unidos["Balaroti", "marca"] = (
+        unidos["Balaroti", "marca"]
+        .pipe(lambda s: s.where(s.notna(), unidos[1, "marca"]))
+        .pipe(lambda s: s.where(s.notna(), unidos[2, "marca"]))
+        .pipe(lambda s: s.where(s.notna(), unidos[3, "marca"]))
+    )
+
+    colunas_para_desc = [
         (loja, coluna) for loja, coluna in unidos.columns if coluna == "nome"
     ]
-    unidos = unidos.drop(columns=colunas_para_remover)
+
+    colunas_para_marca = [
+        (loja, coluna) for loja, coluna in unidos.columns if coluna == "marca"
+    ]
+
+    colunas_para_marca = colunas_para_marca[1:]
+
+    unidos = unidos.drop(columns=colunas_para_desc)
+    unidos = unidos.drop(columns=colunas_para_marca)
 
     return unidos
 
@@ -179,44 +210,98 @@ def calcular_variacao_preco_estoque(
     return df
 
 
-import pandas as pd
-import numpy as np
-
-
 def formatar_colunas(df: pd.DataFrame) -> pd.DataFrame:
     for loja, coluna in df.columns:
-        # Ignorando colunas com 'variacao_preco'
         if "variacao_preco" in coluna:
             continue
 
-        # Checando se a coluna é relacionada a preço e não é uma coluna de variação de preço
-        if (
-            "preco" in coluna and "variacao_preco" not in coluna
-        ):  # Tratando strings vazias e nulas, substituindo vírgulas por pontos, e convertendo para float
+        if "preco" in coluna and "variacao_preco" not in coluna:
             df[loja, coluna] = (
                 df[loja, coluna]
-                .replace("", np.nan)  # Trata strings vazias
-                .dropna()  # Remove valores nulos
+                .replace("", np.nan)
+                .dropna()
                 .apply(lambda x: x.replace(",", ".") if isinstance(x, str) else x)
                 .astype(float)
                 .apply(lambda x: f"{x:.2f}".replace(".", ","))
             )
 
-        # Checando se a coluna é relacionada a estoque
         elif "estoque" in coluna:
             df[loja, coluna] = df[loja, coluna].fillna(0).astype(int)
             df[loja, coluna] = df[loja, coluna].replace(0, np.nan).fillna("")
 
-    # Reordenando as colunas após a modificação
     df = df.sort_index(axis=1)
 
     return df
+
+
+def obtem_ranqueamento(caminho_top_2500: str, df_lojas) -> pd.DataFrame:
+    padrao = r"top_2500\\(.*?)\\top_2500_dia_(.*?).csv"
+    df_concat = pd.DataFrame()
+
+    for root, dirs, files in os.walk(caminho_top_2500):
+        for nome_arquivo in sorted(
+            files, reverse=True
+        ):  # Ordena os arquivos para pegar o mais recente primeiro
+            if nome_arquivo.endswith(".csv"):
+                caminho_completo = os.path.join(root, nome_arquivo)
+                correspondencia = re.search(padrao, caminho_completo)
+                if correspondencia:
+                    nome_loja = correspondencia.group(1).lower()
+                    id_loja = df_lojas.loc[
+                        df_lojas["nome_loja"].str.lower() == nome_loja,
+                        "nome_loja",
+                    ].values[0]
+
+                    df = pd.read_csv(
+                        caminho_completo, sep=";", encoding="utf-8-sig", decimal=","
+                    )
+                    df.rename(columns={"Unnamed: 0": "ranqueamento"}, inplace=True)
+                    df = df[["ranqueamento", "ean"]]
+                    df["loja"] = id_loja  # Adiciona a coluna loja com o ID
+
+                    df_concat = pd.concat([df_concat, df], ignore_index=True)
+                    break  # Interrompe após processar o arquivo mais recente de cada loja
+
+    df_concat["ean"] = df_concat["ean"].astype(str)
+
+    return df_concat
+
+
+caminho = r"Z:\Vitor\dados_concorrentes\top_2500"
+df_lojas = obtem_mapeamento_lojas()
+df_ranqueamento = obtem_ranqueamento(caminho, df_lojas)
+
+
+def adicionar_ranqueamento_por_loja(df: pd.DataFrame, df_ranqueamento: pd.DataFrame) -> pd.DataFrame:
+    # Conversão do índice do df para Int64, lidando com NaNs.
+    # Nota: Se o índice já é um MultiIndex, esta abordagem precisa ser ajustada.
+    df.index = pd.to_numeric(df.index, errors='coerce').astype('Int64')
+
+    # Conversão da coluna 'ean' em df_ranqueamento para Int64, lidando com strings vazias e NaNs.
+    df_ranqueamento['ean'] = pd.to_numeric(df_ranqueamento['ean'].replace('', np.nan), errors='coerce').astype('Int64')
+
+    for loja in df_ranqueamento['loja'].unique():
+        df_ranqueamento_loja = df_ranqueamento[df_ranqueamento['loja'] == loja]
+
+        # Criação do dicionário de ranqueamento com EAN como chave
+        ranqueamento_dict = df_ranqueamento_loja.set_index('ean')['ranqueamento'].to_dict()
+
+        # Mapeamento do ranqueamento para o DataFrame df
+        df[(loja, 'ranqueamento')] = df.index.map(ranqueamento_dict.get)
+
+    return df
+
+
+df_unidos = adicionar_ranqueamento_por_loja(df, df_ranqueamento)
+df_unidos.to_csv("teste.csv", sep=";", encoding="utf-8-sig", decimal=",")
 
 
 # %%
 
 dicionario = {
     "descricao": "descricao",
+    "marca": "marca",
+    "grupo": "grupo",
     "preco_base": "preco_compra",
     "preco_venda": "preco_venda",
     "estoque": "estoque",
@@ -230,6 +315,8 @@ dicionario = {
 categorico = pd.CategoricalDtype(
     [
         "descricao",
+        "marca",
+        "grupo",
         "preco_compra",
         "preco_venda",
         "estoque",
@@ -242,7 +329,9 @@ categorico = pd.CategoricalDtype(
     ordered=True,
 )
 
+
 def criar_excel_email():
+    dia_hoje = pd.Timestamp.today().strftime("%d-%m")
     df_balaroti = obter_produtos_balaroti()
     df_concorrentes = obter_produtos_concorrentes()
     df_unidos = combinar_dados(df_balaroti, df_concorrentes)
@@ -259,9 +348,14 @@ def criar_excel_email():
     df_final = formatar_colunas(df_final)
 
     df_final.fillna("").replace("nan%", "", regex=True).to_csv(
-        "dados_concorrentes.csv", sep=";", encoding="utf-8-sig", na_rep="0", decimal=","
+        f"dados_concorrentes_{dia_hoje}.csv",
+        sep=";",
+        encoding="utf-8-sig",
+        na_rep="0",
+        decimal=",",
     )
 
+    return df_final
 
-if __name__ == "__main__":
-    criar_excel_email()
+
+df = criar_excel_email()

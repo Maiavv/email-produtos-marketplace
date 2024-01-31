@@ -27,6 +27,7 @@ def gerar_link(start, end, loja_vtex: str) -> str:
     base_url = f"https://www.{loja_vtex}.com.br/api/catalog_system/pub/products/search?"
 
     query_string = "&".join([f"fq=productId:{i}" for i in range(start, end + 1)])
+
     return f"{base_url}{query_string}"
 
 
@@ -36,6 +37,7 @@ def fazer_request(link) -> dict:
     """
     try:
         response = requests.get(link)
+        print(response.url)
         data = response.json()
         return data
     except Exception as e:
@@ -74,7 +76,6 @@ def obter_dados_importantes(data, colunas_desejadas) -> list:
             extracted_data.append(important_data)
         except Exception as e:
             ...
-
     return extracted_data
 
 
@@ -137,7 +138,7 @@ def obtem_dados_lojas_vtex(loja) -> None:
     """
     Função principal do programa.
     """
-    total_products = 100000
+    total_products = 1000000
     per_page = 50
     save_interval = 10000
     sleep_time = 1.5
@@ -145,7 +146,7 @@ def obtem_dados_lojas_vtex(loja) -> None:
 
     all_data = []
 
-    for i in range(0, total_products + 1, per_page):
+    for i in range(800000, total_products + 1, per_page):
         end = i + per_page - 1
         link = gerar_link(i, end, loja)
 
@@ -176,9 +177,4 @@ def obtem_dados_lojas_vtex(loja) -> None:
         filename = f"data_{start}_{total_products}_dia_{dia}_loja_{loja}.xlsx"
         salvar_em_sqlite(df, loja, dia, "dados_concorrentes.db")
 
-
-if __name__ == "__main__":
-    lojas = ["cassol", "nichele", "obramax"]
-
-    for loja in lojas:
-        obtem_dados_lojas_vtex(loja)
+obtem_dados_lojas_vtex("cassol")

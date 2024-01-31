@@ -1,23 +1,14 @@
 import schedule
-import datetime
+import time
 from obter_produtos_concorrentes import obtem_dados_lojas_vtex
-from cria_excel_email import criar_excel_email
-from enviar_email import enviar_email
 
+# def job() -> None:
+lojas: list[str] = ["cassol", "nichele", "obramax"]
+for loja in lojas:
+    obtem_dados_lojas_vtex(loja)
 
-def job():
-    lojas = ["cassol", "nichele", "obramax"]
+# schedule.every().day.at("04:00").do(job)
 
-    for loja in lojas:
-        obtem_dados_lojas_vtex(loja)
-
-    hoje = datetime.date.today()
-
-    
-
-    enviar_email(
-        subject="Dados concorrentes - " + str(hoje), message="", recipient_list=[""]
-    )
-
-
-schedule.every().day.at("00:00").do(job)
+# while True:
+#     schedule.run_pending()
+#     time.sleep(1)
