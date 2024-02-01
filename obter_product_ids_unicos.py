@@ -24,12 +24,7 @@ def fazer_request(link) -> list:
 
 def obter_dados_importantes(data) -> list:
     """Extrai apenas o productId da resposta da API da vtex."""
-    try:
-        return [
-            item.get("productId", None) for item in data if item.get("productId", None)
-        ]
-    except Exception as e:
-        return []
+    return [item.get("productId", None) for item in data if item.get("productId", None)]
 
 
 def salvar_em_csv(all_product_ids, loja):
@@ -73,6 +68,7 @@ def threads_obtem_dados_lojas_vtex(lojas):
     for thread in threads:
         thread.join()
 
+    print("Finished fetching data for all stores.")
 
 if __name__ == "__main__":
     lojas = ["obramax", "nichele", "cassol"]

@@ -1,10 +1,11 @@
 import pandas as pd
+import threading
 import requests
 import time
 import os
-import sqlite3
-from datetime import datetime
 
+from datetime import datetime
+from typing import List
 
 colunas_desejadas = [
     "PriceWithoutDiscount",
@@ -20,15 +21,21 @@ colunas_desejadas = [
 ]
 
 
-def gerar_link(start, end, loja_vtex: str) -> str:
-    """
-    Gera um URL para fazer uma requisição à API da vtex.
-    """
+def gerar_link(loja_vtex: str) -> List[str]:
+    product_ids = pd.read_csv(f"product_id/product_ids_{loja_vtex}.csv")
     base_url = f"https://www.{loja_vtex}.com.br/api/catalog_system/pub/products/search?"
 
-    query_string = "&".join([f"fq=productId:{i}" for i in range(start, end + 1)])
+    # Certifique-se de que a coluna com IDs está corretamente nomeada como 'product_id' no CSV
+    coluna = product_ids.columns[0]
+    ids = product_ids[coluna].tolist()
 
-    return f"{base_url}{query_string}"
+    links = []
+    for i in range(0, len(ids), 50):
+        ids_slice = ids[i : i + 50]
+        query_string = "&".join([f"fq=productId:{id_}" for id_ in ids_slice])
+        links.append(f"{base_url}{query_string}")
+
+    return links
 
 
 def fazer_request(link) -> dict:
@@ -177,4 +184,23 @@ def obtem_dados_lojas_vtex(loja) -> None:
         filename = f"data_{start}_{total_products}_dia_{dia}_loja_{loja}.xlsx"
         salvar_em_sqlite(df, loja, dia, "dados_concorrentes.db")
 
-obtem_dados_lojas_vtex("cassol")
+
+def threads_obtem_dados_lojas_vtex(lojas):
+    """
+    Função para obter os dados das lojas utilizando threads.
+    """
+    threads = [
+        threading.Thread(target=obtem_dados_lojas_vtex, args=(loja,)) for loja in lojas
+    ]
+
+    for thread in threads:
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+    print("Finished fetching data for all stores.")
+
+
+if __name__ == "__main__":
+    lojas = ["cassol", "obramax", "nichele"]
