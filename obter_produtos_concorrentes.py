@@ -2,6 +2,7 @@ import pandas as pd
 import threading
 import requests
 import time
+import sqlite3
 import os
 
 from datetime import datetime
@@ -17,11 +18,12 @@ colunas_desejadas = [
     "itemId",
     "Price",
     "brand",
+    "link",
     "ean",
 ]
 
 
-def gerar_link(loja_vtex: str) -> List[str]:
+def gerar_links(loja_vtex: str) -> List[str]:
     product_ids = pd.read_csv(f"product_id/product_ids_{loja_vtex}.csv")
     base_url = f"https://www.{loja_vtex}.com.br/api/catalog_system/pub/products/search?"
 
@@ -44,7 +46,6 @@ def fazer_request(link) -> dict:
     """
     try:
         response = requests.get(link)
-        print(response.url)
         data = response.json()
         return data
     except Exception as e:
@@ -53,9 +54,9 @@ def fazer_request(link) -> dict:
         return data
 
 
-def obter_dados_importantes(data, colunas_desejadas) -> list:
+def obter_dados_importantes(data: list, colunas_desejadas: list) -> list:
     """
-    Extrai os dados importantes da resposta da API da vtex.
+    Extrai os dados importantes da resposta da API da vtex, incluindo o último campo do campo "categories".
     """
     extracted_data = []
     for item in data:
@@ -80,9 +81,15 @@ def obter_dados_importantes(data, colunas_desejadas) -> list:
                     ]
                 }
             )
+
+            # Nova lógica para extrair o último campo de "categories"
+            categories = item.get("categories", [])
+            important_data["lastCategory"] = categories[-1] if categories else None
+
             extracted_data.append(important_data)
         except Exception as e:
-            ...
+            # Considerar logar o erro ou tratá-lo de maneira adequada
+            pass
     return extracted_data
 
 
@@ -97,92 +104,85 @@ def transformar_dados_em_dataframe(data, nome_loja, data_inicio) -> pd.DataFrame
     return df
 
 
+
 def salvar_em_sqlite(df, nome_loja, data_inicio, nome_arquivo_db):
-    conexao = sqlite3.connect(nome_arquivo_db)
-    cursor = conexao.cursor()
+    with sqlite3.connect(nome_arquivo_db) as conexao:
+        cursor = conexao.cursor()
 
-    # Inserir ou atualizar dados da loja
-    cursor.execute("INSERT OR IGNORE INTO Lojas (nome_loja) VALUES (?)", (nome_loja,))
-    id_loja = cursor.execute(
-        "SELECT id_loja FROM Lojas WHERE nome_loja = ?", (nome_loja,)
-    ).fetchone()[0]
-
-    for _, produto in df.iterrows():
-        # Inserir ou atualizar produto
+        # Inserir ou atualizar dados da loja
         cursor.execute(
-            "INSERT OR IGNORE INTO Produtos (id_produto, nome, marca, ean) VALUES (?, ?, ?, ?)",
-            (
-                produto["productReference"],
-                produto["productName"],
-                produto["brand"],
-                produto["ean"],
-            ),
+            "INSERT OR IGNORE INTO Lojas (nome_loja) VALUES (?)", (nome_loja,)
         )
+        id_loja = cursor.execute(
+            "SELECT id_loja FROM Lojas WHERE nome_loja = ?", (nome_loja,)
+        ).fetchone()[0]
 
-        # Inserir preço diário
-        cursor.execute(
-            """
-            INSERT INTO PrecosDiarios (id_produto, id_loja, data, preco, list_price, is_available, available_quantity, preco_sem_desconto) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                produto["productReference"],
-                id_loja,
-                data_inicio,
-                produto["Price"],
-                produto["ListPrice"],
-                produto["IsAvailable"],
-                produto["AvailableQuantity"],
-                produto["PriceWithoutDiscount"],
-            ),
-        )
+        # Preparar instrução SQL para inserção ou atualização de produtos
+        produto_sql = """
+        INSERT OR IGNORE INTO Produtos (id_produto, nome, marca, ean, categoria) VALUES (?, ?, ?, ?, ?)
+        """
 
-    conexao.commit()
-    conexao.close()
+        # Preparar instrução SQL para inserção de preços diários
+        preco_diario_sql = """
+        INSERT INTO PrecosDiarios (id_produto, id_loja, data, preco, list_price, is_available, available_quantity, preco_sem_desconto) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """
+
+        for _, produto in df.iterrows():
+            cursor.execute(
+                "SELECT id_produto FROM Produtos WHERE id_produto = ?",
+                (produto["productReference"],),
+            )
+            existe = cursor.fetchone()
+
+            if not existe:
+                # Produto não existe, inserir novo registro
+                cursor.execute(
+                    produto_sql,
+                    (
+                        produto["productReference"],
+                        produto["productName"],
+                        produto["brand"],
+                        produto["ean"],
+                        produto["lastCategory"],
+                    ),
+                )
+            else:
+                cursor.execute(
+                    "UPDATE Produtos SET categoria = ? WHERE id_produto = ?",
+                    (produto["lastCategory"], produto["productReference"]),
+                )
+
+            # Inserir preço diário
+            cursor.execute(
+                preco_diario_sql,
+                (
+                    produto["productReference"],
+                    id_loja,
+                    data_inicio,
+                    produto["Price"],
+                    produto["ListPrice"],
+                    produto["IsAvailable"],
+                    produto["AvailableQuantity"],
+                    produto["PriceWithoutDiscount"],
+                ),
+            )
 
 
 def obtem_dados_lojas_vtex(loja) -> None:
     """
     Função principal do programa.
     """
-    total_products = 1000000
-    per_page = 50
-    save_interval = 10000
-    sleep_time = 1.5
-    dia = datetime.now().strftime("%d-%m-%Y-%H-%M")
 
-    all_data = []
+    hoje = datetime.now()
 
-    for i in range(800000, total_products + 1, per_page):
-        end = i + per_page - 1
-        link = gerar_link(i, end, loja)
-
-        print(f"Fetching data for products {i} to {end}...")
-
+    links = gerar_links(loja)
+    for link in links:
         response_data = fazer_request(link)
-
-        extracted_data = obter_dados_importantes(response_data, colunas_desejadas)
-        all_data.extend(extracted_data)
-
-        if end % save_interval == 0:
-            df = transformar_dados_em_dataframe(all_data, loja, dia)
-            filename = f"data_{i - save_interval + 1}_{end}_dia_{dia}_loja_{loja}.xlsx"
-            try:
-                salvar_em_sqlite(df, loja, dia, "dados_concorrentes.db")
-                print(
-                    f"Data for products {i - save_interval + 1} to {end} saved to {filename}"
-                )
-            except Exception as e:
-                print(f"salvar os ids com final {end} no dia {dia} da loja {loja}: {e}")
-            all_data = []
-
-        time.sleep(sleep_time)
-
-    if all_data:
-        start = total_products - (total_products % save_interval) + 1
-        df = transformar_dados_em_dataframe(all_data, loja, dia)
-        filename = f"data_{start}_{total_products}_dia_{dia}_loja_{loja}.xlsx"
-        salvar_em_sqlite(df, loja, dia, "dados_concorrentes.db")
+        important_data = obter_dados_importantes(response_data, colunas_desejadas)
+        time.sleep(1)
+        df = transformar_dados_em_dataframe(important_data, loja, hoje)
+        salvar_em_sqlite(df, loja, hoje, "dados_concorrentes.db")
 
 
 def threads_obtem_dados_lojas_vtex(lojas):
@@ -200,7 +200,3 @@ def threads_obtem_dados_lojas_vtex(lojas):
         thread.join()
 
     print("Finished fetching data for all stores.")
-
-
-if __name__ == "__main__":
-    lojas = ["cassol", "obramax", "nichele"]
