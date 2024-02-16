@@ -46,7 +46,9 @@ def fazer_request(link) -> dict:
     """
     try:
         response = requests.get(link)
+        print(response.url)
         data = response.json()
+
         return data
     except Exception as e:
         print(f"Erro ao fazer request: {e}")
@@ -200,3 +202,9 @@ def threads_obtem_dados_lojas_vtex(lojas):
         thread.join()
 
     print("Finished fetching data for all stores.")
+
+if __name__ == "__main__":
+    lojas = ["arcelormittal"]
+    threads_obtem_dados_lojas_vtex(lojas)
+    print("Finished fetching data for all stores.")
+

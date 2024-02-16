@@ -78,8 +78,11 @@ def obtem_top_1500(loja):
     df = extract_desired_information(products)
     print(f"Data from {loja} saved to {loja}.csv")
     df.to_csv(
-        rf"Z:\Vitor\dados_concorrentes\top_2500\{loja}\top_1500_dia_{dia_mes}.csv",
+        rf"Z:\Vitor\dados_concorrentes\top_1500\{loja}\top_1500_dia_{dia_mes}.csv",
         sep=";",
         encoding="utf-8-sig",
     )
-    
+
+if __name__ == "__main__":
+    for loja in lojas:
+        obtem_top_1500(loja)

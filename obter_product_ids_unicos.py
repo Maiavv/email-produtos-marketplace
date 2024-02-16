@@ -69,7 +69,3 @@ def threads_obtem_dados_lojas_vtex(lojas):
         thread.join()
 
     print("Finished fetching data for all stores.")
-
-if __name__ == "__main__":
-    lojas = ["obramax", "nichele", "cassol"]
-    threads_obtem_dados_lojas_vtex(lojas)
