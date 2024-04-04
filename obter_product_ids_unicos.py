@@ -31,7 +31,7 @@ def salvar_em_csv(all_product_ids, loja):
     """Salva os productIds em um arquivo CSV para a loja especificada, utilizando o modo 'append'."""
     if all_product_ids:
         df = pd.DataFrame(all_product_ids)
-        nome_arquivo = f"product_ids_{loja}.csv"
+        nome_arquivo = f"product_ids_{loja}_v2.csv"
 
         if not os.path.exists(nome_arquivo):
             df.to_csv(nome_arquivo, mode="a", index=False, header=True)
@@ -46,11 +46,14 @@ def obtem_dados_lojas_vtex(loja) -> None:
 
     for i in range(0, total_products + 1, per_page):
         end = i + per_page - 1
-        link = gerar_link(i, end, loja)
-        print(f"Fetching data for products {i} to {end} in {loja}...")
+        try:
+            link = gerar_link(i, end, loja)
+            print(f"Fetching data for products {i} to {end} in {loja}...")
 
-        response_data = fazer_request(link)
-        product_ids = obter_dados_importantes(response_data)
+            response_data = fazer_request(link)
+            product_ids = obter_dados_importantes(response_data)
+        except:
+            ...
 
         if product_ids:
             salvar_em_csv(product_ids, loja)
@@ -69,3 +72,9 @@ def threads_obtem_dados_lojas_vtex(lojas):
         thread.join()
 
     print("Finished fetching data for all stores.")
+
+lojas = ['cassol', 'revestacabamentos']
+
+if __name__ == "__main__":
+    for loja in lojas:
+        obtem_dados_lojas_vtex(loja)

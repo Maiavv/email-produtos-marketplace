@@ -15,7 +15,7 @@ def obter_produtos_balaroti():
         CADPROD.pr_codbarra, 
         CADPROD.PR_DESCRICAO, 
         CADPROD.PR_MARCA, 
-        CADPROD.PR_IDPRODUTO,
+        CADPROD.PR_CODSEQ,
         listapre.LP_PRECOBASE, 
         listapre.LP_PRECOVENDA, 
         CASE
@@ -49,7 +49,7 @@ def obter_produtos_balaroti():
     df_agregado = df.rename(
         columns={
             "PR_CODBARRA": "ean",
-            "PR_IDPRODUTO": "id_produto",
+            "PR_CODSEQ": "sku",
             "PR_DESCRICAO": "descricao",
             "GR_DESCRICAO": "grupo",
             "PR_MARCA": "marca",
@@ -64,7 +64,7 @@ def obter_produtos_balaroti():
     df_agregado = df_agregado.astype(
         {
             "ean": str,
-            "id_produto": int,
+            "sku": int,
             "descricao": str,
             "marca": str,
             "grupo": str,
@@ -95,10 +95,11 @@ def obtem_mapeamento_lojas():
 
 
 def obter_produtos_concorrentes():
+    """ """
     query = """--sql
     SELECT ean, preco, marca, nome, list_price, id_loja, available_quantity, categoria, PrecosDiarios.data
     FROM Produtos
-    JOIN PrecosDiarios ON Produtos.ean = PrecosDiarios.id_produto OR Produtos.id_produto = PrecosDiarios.id_produto
+    JOIN PrecosDiarios ON Produtos.id_produto = PrecosDiarios.id_produto or Produtos.ean = PrecosDiarios.id_produto
     """
     with sqlite3.connect("dados_concorrentes.db") as conn:
         df_concorrentes = pd.read_sql_query(query, conn)
@@ -120,7 +121,7 @@ def obter_produtos_concorrentes():
             "list_price": float,
             "id_loja": int,
             "available_quantity": int,
-            "categoria": str,
+            "categoria": str,   
         }
     )
 
@@ -132,7 +133,6 @@ def obter_produtos_concorrentes():
 
     return df_concorrentes
 
-
 def combinar_dados(df_balaroti, df_concorrentes):
     df_c = (
         df_concorrentes.set_index(["ean", "id_loja"])
@@ -143,7 +143,7 @@ def combinar_dados(df_balaroti, df_concorrentes):
     df_bala = df_balaroti.set_index("ean")
     df_bala.rename(
         {
-            "id_produto": ("Balaroti", "id_produto"),
+            "sku": ("Balaroti", "sku"),
             "descricao": ("Balaroti", "descricao"),
             "marca": ("Balaroti", "marca"),
             "grupo": ("Balaroti", "grupo"),
@@ -164,6 +164,7 @@ def combinar_dados(df_balaroti, df_concorrentes):
         .pipe(lambda s: s.where(s.notna(), unidos[1, "nome"]))
         .pipe(lambda s: s.where(s.notna(), unidos[2, "nome"]))
         .pipe(lambda s: s.where(s.notna(), unidos[3, "nome"]))
+        .pipe(lambda s: s.where(s.notna(), unidos[40603, "nome"]))
     )
 
     unidos["Balaroti", "marca"] = (
@@ -171,6 +172,7 @@ def combinar_dados(df_balaroti, df_concorrentes):
         .pipe(lambda s: s.where(s.notna(), unidos[1, "marca"]))
         .pipe(lambda s: s.where(s.notna(), unidos[2, "marca"]))
         .pipe(lambda s: s.where(s.notna(), unidos[3, "marca"]))
+        .pipe(lambda s: s.where(s.notna(), unidos[40603, "marca"]))
     )
 
     unidos["Balaroti", "grupo"] = (
@@ -178,6 +180,7 @@ def combinar_dados(df_balaroti, df_concorrentes):
         .pipe(lambda s: s.where(s.notna(), unidos[1, "categoria"]))
         .pipe(lambda s: s.where(s.notna(), unidos[2, "categoria"]))
         .pipe(lambda s: s.where(s.notna(), unidos[3, "categoria"]))
+        .pipe(lambda s: s.where(s.notna(), unidos[40603, "categoria"]))
     )
 
     colunas_para_desc = [
@@ -270,8 +273,9 @@ def obtem_ranqueamento(caminho_top_2500: str, df_lojas) -> pd.DataFrame:
 
     return df_concat
 
-#pegando o df para o formatar_colunas
-    
+
+# pegando o df para o formatar_colunas
+
 
 def formatar_colunas(df: pd.DataFrame) -> pd.DataFrame:
     for loja, coluna in df.columns:
@@ -311,7 +315,7 @@ def adicionar_ranqueamento_por_loja(
 # %%
 
 dicionario = {
-    "id_produto": "id_produto",
+    "sku": "sku",
     "descricao": "descricao",
     "marca": "marca",
     "grupo": "grupo",
@@ -329,7 +333,7 @@ dicionario = {
 
 categorico = pd.CategoricalDtype(
     [
-        "id_produto",
+        "sku",
         "descricao",
         "marca",
         "grupo",
@@ -389,4 +393,4 @@ def criar_excel_email():
     )
 
 
-criar_excel_email()
+# criar_excel_email()

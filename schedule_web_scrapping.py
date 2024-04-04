@@ -8,10 +8,13 @@ from enviar_email import enviar_email
 
 
 def job() -> None:
-    lojas = ["cassol", "nichele", "obramax"]
+    lojas = ["cassol", "nichele", "obramax", "revestacabamentos"]
+
     for loja in lojas:
         obtem_dados_lojas_vtex(loja)
         obtem_top_1500(loja)
+
+    obtem_top_1500("balaroti")
 
     time.sleep(50)
 
@@ -19,8 +22,9 @@ def job() -> None:
     enviar_email("Relatório de produtos dos concorrentes")
 
 
-schedule.every().day.at("02:00").do(job)
+schedule.every().day.at("01:52").do(job)
 
 while True:
     schedule.run_pending()
     time.sleep(1)
+

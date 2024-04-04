@@ -67,7 +67,7 @@ def extract_desired_information(products):
     return pd.DataFrame(extracted_data)
 
 
-lojas = ["balaroti", "obramax", "cassol", "nichele"]
+lojas = ["cassol", "balaroti", "nichele", "obramax", "revestacabamentos"]
 
 
 def obtem_top_1500(loja):
@@ -83,6 +83,6 @@ def obtem_top_1500(loja):
         encoding="utf-8-sig",
     )
 
-if __name__ == "__main__":
-    for loja in lojas:
-        obtem_top_1500(loja)
+# if __name__ == "__main__":
+#     for loja in lojas:
+#         obtem_top_1500(loja)

@@ -90,7 +90,6 @@ def obter_dados_importantes(data: list, colunas_desejadas: list) -> list:
 
             extracted_data.append(important_data)
         except Exception as e:
-            # Considerar logar o erro ou tratá-lo de maneira adequada
             pass
     return extracted_data
 
@@ -203,8 +202,10 @@ def threads_obtem_dados_lojas_vtex(lojas):
 
     print("Finished fetching data for all stores.")
 
-if __name__ == "__main__":
-    lojas = ["arcelormittal"]
-    threads_obtem_dados_lojas_vtex(lojas)
-    print("Finished fetching data for all stores.")
-
+# if __name__ == "__main__":
+#     loja = "revestacabamentos"
+#     lojas = ["cassol", "nichele", "obramax"]
+#     threads_obtem_dados_lojas_vtex(lojas)
+#     obtem_dados_lojas_vtex(loja)
+    
+#     print("Finished fetching data for all stores.")

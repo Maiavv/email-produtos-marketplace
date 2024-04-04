@@ -31,13 +31,32 @@ def enviar_email(subject: str):
     with get_connection() as conexao:
         EmailMessage(
             subject=subject,
-            body="Bom dia, Segue em anexo o relatório de produtos dos concorrentes.",
+            body="Bom dia, Segue em anexo o relatório de produtos dos concorrentes",
             from_email="vitor.maia@balaroti.com.br",
-            to=["luana.lara@balaroti.com.br", "jessica.machado@balaroti.com.br", "izabela.lazinski@balaroti.com.br", "rui@balaroti.com.br"],
-            connection=conexao,
-            cc=[
-                "angeloluiz@balaroti.com.br"
+            to=[
+                "luana.lara@balaroti.com.br",
+                "jessica.machado@balaroti.com.br",
+                "izabela.lazinski@balaroti.com.br",
+                "camilagrahl@balaroti.com.br",
+                "rui@balaroti.com.br",
+                "marcos.santos@balaroti.com.br",
+                "denilson@balaroti.com.br",
+                "rafael.lessnau@balaroti.com.br",
+                "raphaelaugusto@balaroti.com.br",
+                "alan@balaroti.com.br",
+                "joelma.lopes@balaroti.com.br",
+                "jessica.gabardo@balaroti.com.br",
+                "jader.benetton@balaroti.com.br",
+                "mauricio.eduardo@balaroti.com.br",
+                "elis@balaroti.com.br",
+                "maristela@balaroti.com.br"
             ],
+            connection=conexao,
+            cc=["vitor.maia@balaroti.com.br", "ly.salles@balaroti.com.br", "angeloluiz@balaroti.com.br", "gustavo.dias@balaroti.com.br"],
             attachments=[(nome_arquivo, conteudo_arquivo, mimetype)],
         ).send()
 
+
+if __name__ == "__main__":
+    hoje = datetime.datetime.now().strftime("%d/%m/%Y")
+    enviar_email(f"Relatório de produtos concorrentes - {hoje}")
