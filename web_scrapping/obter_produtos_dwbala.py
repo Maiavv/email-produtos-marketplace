@@ -1,11 +1,12 @@
 import pandas as pd
+import os
 from sqlalchemy import create_engine, select, Table, MetaData, func, text
 
 host = "pgsql.balaroti.local"
-port = "5432"
+port = os.environ.get("dw_bala_port")
 dbname = "dwbala_olap"
-username = "ro_financeiro"
-password = r"U6de^f7%#E9a"
+username = os.environ.get('dw_bala_username')
+password = os.environ.get('dw_bala_password')
 
 
 def retira_dados_bala(host, port, dbname, username, password):
