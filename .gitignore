@@ -161,3 +161,4 @@ cython_debug/
 
 .dados_concorrentes.db/
 
+dados_concorrentes.db
